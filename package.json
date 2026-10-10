@@ -1,0 +1,47 @@
+{
+  "name": "cashflow-nl",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Lokale financiële administratie voor banktransacties.",
+  "author": "Cashflow",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "app": "npm run build && electron .",
+    "app:mac": "npm run build && electron-builder --mac dmg zip"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "html2canvas": "^1.4.1",
+    "pdfjs-dist": "^6.3.289",
+    "react": "latest",
+    "react-dom": "latest",
+    "typescript": "latest",
+    "vite": "latest"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "nl.cashflow.app",
+    "productName": "Cashflow",
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.finance",
+      "icon": "build/icon.icns",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    }
+  }
+}

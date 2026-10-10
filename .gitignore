@@ -1,0 +1,15 @@
+# Dependencies and generated build/package output
+node_modules/
+dist/
+
+# Local machine and editor files
+.DS_Store
+*.tsbuildinfo
+.vscode/
+.idea/
+
+# Temporary files and local data
+tmp/
+.env
+.env.*
+!.env.example
