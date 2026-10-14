@@ -1,13 +1,13 @@
-import type { Category, Rule, Transaction } from "./types";
+import type { Category, ImportHistoryEntry, Rule, Transaction } from "./types";
 
 const DB = "cashflow-nl";
-const VERSION = 1;
+const VERSION = 2;
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const r = indexedDB.open(DB, VERSION);
     r.onupgradeneeded = () => {
       const db = r.result;
-      ["transactions", "categories", "rules"].forEach((s) => {
+      ["transactions", "categories", "rules", "importHistory"].forEach((s) => {
         if (!db.objectStoreNames.contains(s))
           db.createObjectStore(s, { keyPath: "id" });
       });
@@ -41,6 +41,9 @@ export const loadAll = async () => ({
 });
 export const saveTransactions = (x: Transaction[]) =>
   putMany("transactions", x);
+export const loadImportHistory = () => all<ImportHistoryEntry>("importHistory");
+export const saveImportHistory = (entry: ImportHistoryEntry) =>
+  putMany("importHistory", [entry]);
 let categoriesSaveChain: Promise<void> = Promise.resolve();
 
 async function saveCategoriesNow(categories: Category[]) {

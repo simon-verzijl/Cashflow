@@ -21,11 +21,13 @@ import {
 import {
   loadAll,
   replaceAll,
+  loadImportHistory,
   saveCategories,
+  saveImportHistory,
   saveRules,
   saveTransactions,
 } from "./storage";
-import type { Category, Rule, Transaction } from "./types";
+import type { Category, ImportHistoryEntry, Rule, Transaction } from "./types";
 
 const money = new Intl.NumberFormat("nl-NL", {
   style: "currency",
@@ -37,8 +39,21 @@ const date = (s: string) =>
     month: "short",
     year: "numeric",
   }).format(new Date(`${s}T12:00:00`));
+const importDateTime = (s: string) =>
+  new Intl.DateTimeFormat("nl-NL", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(s));
 const uid = (p: string) => `${p}-${crypto.randomUUID()}`;
 const MAX_VISIBLE_RESULTS = 250;
+const matchesSearchTerms = (text: string, query: string) => {
+  const normalizedText = text.toLocaleLowerCase();
+  const terms = query
+    .split("|")
+    .map((term) => term.trim().toLocaleLowerCase())
+    .filter(Boolean);
+  return terms.length === 0 || terms.some((term) => normalizedText.includes(term));
+};
 const RECENT_CATEGORY_STORAGE_KEY = "cashflow-recent-categories";
 const IGNORED_RULE_PROPOSALS_STORAGE_KEY = "cashflow-ignored-rule-proposals";
 const YEAR_CHART_ORDER_STORAGE_KEY = "cashflow-year-chart-order";
@@ -141,6 +156,7 @@ function App() {
     | "importeren"
   >("overzicht");
   const [busy, setBusy] = useState(false);
+  const [importHistory, setImportHistory] = useState<ImportHistoryEntry[]>([]);
   const [notice, setNotice] = useState("");
   const [darkMode, setDarkMode] = useState(
     () => localStorage.getItem("cashflow-dark-mode") === "true",
@@ -160,10 +176,16 @@ function App() {
   const [bulkCat, setBulkCat] = useState("");
   const downloadBackup = async () => {
     const data = await loadAll();
+    const history = await loadImportHistory();
     const blob = new Blob(
       [
         JSON.stringify(
-          { version: 1, exportedAt: new Date().toISOString(), ...data },
+          {
+            version: 1,
+            exportedAt: new Date().toISOString(),
+            ...data,
+            importHistory: history,
+          },
           null,
           2,
         ),
@@ -200,6 +222,17 @@ function App() {
         categories: data.categories as Category[],
         rules: data.rules as Rule[],
       };
+      const previousHistory = await loadImportHistory();
+      const backupHistory = Array.isArray(data.importHistory)
+        ? (data.importHistory as ImportHistoryEntry[])
+        : [];
+      const mergedHistory = Array.from(
+        new Map(
+          [...previousHistory, ...backupHistory].map((entry) => [entry.id, entry]),
+        ).values(),
+      ).sort((a, b) => b.importedAt.localeCompare(a.importedAt));
+      await Promise.all(mergedHistory.map(saveImportHistory));
+      setImportHistory(mergedHistory);
       await replaceAll(restored);
       setTransactions(restored.transactions);
       setCategories(
@@ -215,6 +248,11 @@ function App() {
     }
   };
   useEffect(() => {
+    loadImportHistory().then((history) =>
+      setImportHistory(
+        history.sort((a, b) => b.importedAt.localeCompare(a.importedAt)),
+      ),
+    );
     loadAll().then(async (x) => {
       // Repair the old "Geen categorie" action, which incorrectly confirmed
       // manually cleared transactions. Persist before marking the repair done.
@@ -375,6 +413,23 @@ function App() {
                 : ("pending" as const),
           };
         });
+      const sortedImportedDates = parsed.map((t) => t.date).sort();
+      const historyEntry: ImportHistoryEntry = {
+        id: uid("import"),
+        importedAt: new Date().toISOString(),
+        source: isPdf ? "Nationale-Nederlanden PDF" : "Rabobank CSV",
+        periodStart: sortedImportedDates[0] ?? null,
+        periodEnd: sortedImportedDates[sortedImportedDates.length - 1] ?? null,
+        parsedCount: parsed.length,
+        addedCount: fresh.length,
+        duplicateCount: parsed.length - fresh.length,
+      };
+      await saveImportHistory(historyEntry);
+      setImportHistory((history) =>
+        [historyEntry, ...history].sort((a, b) =>
+          b.importedAt.localeCompare(a.importedAt),
+        ),
+      );
       setTransactions((x) => [...x, ...fresh]);
       if (fresh.length && dateRangeFollowsData.current) {
         const allDates = [...transactions, ...fresh].map((t) => t.date).sort();
@@ -591,6 +646,7 @@ function App() {
             onBack={() => setTab("overzicht")}
             onBackup={downloadBackup}
             onRestore={restoreBackup}
+            importHistory={importHistory}
           />
         )}
         {tab === "overzicht" && (
@@ -691,12 +747,14 @@ function ImportPage({
   onBack,
   onBackup,
   onRestore,
+  importHistory,
 }: {
   busy: boolean;
   onImport: (file: File) => void;
   onBack: () => void;
   onBackup: () => void;
   onRestore: (file: File) => void;
+  importHistory: ImportHistoryEntry[];
 }) {
   return (
     <section className="panel import-page">
@@ -791,6 +849,52 @@ function ImportPage({
             />
           </label>
         </div>
+      </div>
+      <div className="import-history-section">
+        <div>
+          <p className="eyebrow">LOKAAL BIJGEHOUDEN</p>
+          <h3>Importgeschiedenis</h3>
+          <p className="muted">
+            Vanaf nu worden imports bijgehouden. De historie blijft lokaal en
+            wordt opgenomen in nieuwe JSON-back-ups.
+          </p>
+        </div>
+        {importHistory.length ? (
+          <div className="import-history-table-wrap">
+            <table className="import-history-table">
+              <thead>
+                <tr>
+                  <th>Geïmporteerd op</th>
+                  <th>Bron</th>
+                  <th>Periode transacties</th>
+                  <th>Toegevoegd</th>
+                  <th>Overgeslagen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {importHistory.map((entry) => (
+                  <tr key={entry.id}>
+                    <td>{importDateTime(entry.importedAt)}</td>
+                    <td>{entry.source}</td>
+                    <td>
+                      {entry.periodStart && entry.periodEnd
+                        ? `${date(entry.periodStart)} – ${date(entry.periodEnd)}`
+                        : "Geen transactiedatums gevonden"}
+                    </td>
+                    <td>{entry.addedCount}</td>
+                    <td>{entry.duplicateCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="muted import-history-empty">
+            Er zijn nog geen imports geregistreerd. Eerdere imports zijn niet
+            met een importtijd opgeslagen en kunnen daarom niet achteraf worden
+            gereconstrueerd.
+          </p>
+        )}
       </div>
     </section>
   );
@@ -1258,9 +1362,10 @@ function Overview({
       : transactions;
   const detailTransactions = categoryTransactions.filter(
     (t: Transaction) =>
-      `${t.counterparty} ${t.description} ${t.counterpartyIban}`
-        .toLocaleLowerCase()
-        .includes(detailQuery.trim().toLocaleLowerCase()) &&
+      matchesSearchTerms(
+        `${t.counterparty} ${t.description} ${t.counterpartyIban}`,
+        detailQuery,
+      ) &&
       (lower === null || Math.abs(t.amount) >= lower) &&
       (upper === null || Math.abs(t.amount) <= upper),
   );
@@ -1778,6 +1883,7 @@ function Overview({
                 type="search"
                 aria-label="Zoek naam, omschrijving of rekeningnummer"
                 placeholder="Zoek naam, omschrijving of rekeningnummer…"
+                title="Scheid meerdere zoektermen met |, bijvoorbeeld netpoint|ortho"
                 value={detailQuery}
                 onChange={(e) => setDetailQuery(e.target.value)}
               />

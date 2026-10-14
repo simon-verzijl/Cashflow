@@ -251,6 +251,55 @@
 .backup-file-button input {
   display: none;
 }
+.import-history-section {
+  display: grid;
+  gap: 14px;
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+.import-history-section h3 {
+  margin: 0 0 5px;
+  font-size: 17px;
+}
+.import-history-section .muted {
+  max-width: 680px;
+  margin: 0;
+}
+.import-history-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+.import-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.import-history-table th,
+.import-history-table td {
+  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+}
+.import-history-table th {
+  color: var(--muted);
+  font: 500 10px 'DM Mono', monospace;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.import-history-table td:first-child {
+  font-family: 'DM Mono', monospace;
+}
+.import-history-empty {
+  padding: 12px 14px;
+  border: 1px dashed var(--line);
+  border-radius: 7px;
+}
+.dark-mode .import-history-table th,
+.dark-mode .import-history-table td {
+  border-color: var(--line);
+}
 @media (max-width: 800px) {
   .import-options {
     grid-template-columns: 1fr;

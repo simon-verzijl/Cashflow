@@ -43,3 +43,14 @@ export interface Rule {
   categoryId: string;
   enabled: boolean;
 }
+
+export interface ImportHistoryEntry {
+  id: string;
+  importedAt: string;
+  source: "Rabobank CSV" | "Nationale-Nederlanden PDF";
+  periodStart: string | null;
+  periodEnd: string | null;
+  parsedCount: number;
+  addedCount: number;
+  duplicateCount: number;
+}
